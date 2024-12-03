@@ -1,0 +1,41 @@
+ DISPLAY INTERFACE NOTES REFERANCE:-  stm32
+
+DISPLAY_CONTROLLED BY:
+			RST (Hardware reset)
+			CS  (chip select  to enables communication)
+			RS  (Register select wherther Data=1/command=0)
+			WR  (Lcd write)
+			RD  (LCD read)
+			Commucation Bus (parallel or protocol communication)
+
+STEP:1
+ >> First initialization 
+   
+	1.Software reset
+	2.Display off
+	3.Power control 1 or 2..   //contrast and brightness.
+	4.VCOM Control 1 or 2...   //the liquid crystal display to balance the pixel driving voltages. which are used to stabilize the common electrode voltage.
+	5.Inversion Control        //display for different viewing angles or reduce flickering.
+	6.Memory access control (MADCTL) //the display is viewed, such as in portrait, landscape, or inverted modes.
+	7.Pixel format			//to configure the number of bits per pixel and the color format.
+	8.Frame rate control           //configures the division ratio and oscillation frequency to control the refresh rate of the display in normal mode.
+	9.Entry mode set
+	10.Display function control
+	11. Positive gamma correction   // the contrast and color balance of the display. Gamma correction controls the luminance of pixels based on input values,
+	12.Negative gamma correction    //the contrast and luminance of darker shades on the display. While positive gamma correction enhances lighter shades.
+	13. Inversion                  //(i.e., black becomes white, red becomes cyan, etc.)
+	14.Exit sleep mode             //When the display is in sleep mode, it consumes very little power but is not capable of displaying any images or data.
+	15.Turn on the display         //commands to configure the display after exiting sleep mode and then enable the display
+	16.Memory write        //command is used to write pixel data to the display memory (GRAM) of the LCD controller. 
+
+
+
+STEP:2
+     >> command write/ data write through gpio parallel to fillscreen rectangle color same for everything filling color procedure 
+
+
+    first:  SC (start column)and EC (end column)
+    secound:SP(start page) and EP (end page)
+    third :  Memory write               // If the rectangle has dimensions of, say, 50 pixels wide by 60 pixels tall, you need to send the color data 3,000 times (50 × 60 pixels).
+
+   
