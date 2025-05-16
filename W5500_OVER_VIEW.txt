@@ -1,0 +1,149 @@
+W5500 Flow Overview
+
+1.Initialization: Configure the W5500 chip and set up network parameters.
+
+2.Socket Creation: Create a socket for communication.
+
+3.Network Communication: Send/receive data through the socket.
+
+4.Socket Closure: Close the socket after communication.
+
+Hardware Setup:
+
+SPI Communication: The W5500 communicates over SPI (Serial Peripheral Interface).
+
+GPIO: Set up the Chip Select (CS), Reset, and other necessary pins.
+
+Software Setup:
+SPI Functions: Register the SPI read and write functions to handle communication between the STM32 and the W5500.
+
+Buffer Setup: Define the RX and TX buffers for each socket.
+
+Network Configuration: Set up the network parameters (static IP or DHCP).
+
+W5500 Setup: Initialize the W5500 chip with the network parameters.
+
+Example:
+c
+Copy
+Edit
+void W5500_Init(void) {
+    reg_wizchip_cs_cbfunc(wizchipSelect, wizchipUnselect);  
+    reg_wizchip_spi_cbfunc(wizchipReadByte, wizchipWriteByte);  
+    reg_wizchip_spiburst_cbfunc(wizchipReadBurst, wizchipWriteBurst);
+
+    // Buffer size setup for sockets
+    uint8_t rx_tx_buff_sizes[] = {2, 2, 2, 2, 2, 2, 2, 2};
+    wizchip_init(rx_tx_buff_sizes, rx_tx_buff_sizes);
+
+    // Set up network information (static IP example)
+    wiz_NetInfo net_info = {
+        .mac  = {0x00, 0x08, 0xdc, 0x00, 0x00, 0x01}, 
+        .ip   = {192, 168, 1, 100},
+        .sn   = {255, 255, 255, 0},
+        .gw   = {192, 168, 1, 1},
+        .dhcp = NETINFO_STATIC
+    };
+    wizchip_setnetinfo(&net_info);
+}
+
+
+
+2. Socket Creation Flow
+The W5500 has 8 sockets (0-7). Each socket can be configured as:
+
+TCP server
+
+TCP client
+
+UDP
+
+Steps:
+Socket Creation: Call the socket() function to create a socket and specify its configuration (protocol, port, etc.).
+
+Listen (Server): If creating a TCP server, use the listen() function to allow incoming connections.
+
+Connect (Client): For a TCP client, use the connect() function to establish a connection with the server.
+
+Example (TCP Server):
+c
+Copy
+Edit
+int sock = socket(0, Sn_MR_TCP, 5000, 0);  // Create TCP server socket on port 5000
+listen(sock);  // Start listening for incoming connections
+
+
+Example (TCP Client):
+c
+Copy
+Edit
+
+uint8_t server_ip[4] = {192, 168, 1, 100}; 
+int sock = socket(0, Sn_MR_TCP, 5000, 0);  // Create TCP client socket
+connect(sock, server_ip, 5000);  // Connect to server at IP 192.168.1.100 on port 5000
+
+3. Network Communication Flow
+After the socket is created and the connection is established (if needed), you can start sending and receiving data.
+
+Steps:
+Send Data: Use the send() function to send data over the socket.
+
+Receive Data: Use the recv() function to receive data from the socket.
+
+Example (Send Data):
+c
+Copy
+Edit
+const char* msg = "Hello, Server!";
+send(sock, (uint8_t*)msg, strlen(msg));  // Send message to server
+Example (Receive Data):
+c
+Copy
+Edit
+uint8_t buf[1024];
+int len = recv(sock, buf, sizeof(buf));  // Receive data from client/server
+if (len > 0) {
+    // Process received data
+}
+4. Socket Closure Flow
+After communication is complete, you should close the socket to release resources.
+
+Steps:
+Close the Socket: Call close() to release the socket and free its associated resources.
+
+Example:
+c
+Copy
+Edit
+close(sock);  // Close the socket after communication is done
+W5500 Communication Cycle (Summary)
+Initialization:
+
+Set up SPI, GPIO, and network settings.
+
+Socket Creation:
+
+Create a socket for TCP/UDP communication.
+
+Configure the socket for server or client mode.
+
+Data Communication:
+
+Send data via send() and receive data via recv().
+
+Socket Closure:
+
+Close the socket after communication is complete.
+
+Flow Diagram of W5500 Communication
+SPI Setup: Initialize SPI interface.
+
+W5500 Initialization: Set up network and buffers.
+
+Create Socket: Call socket().
+
+Listen/Connect: For server use listen(), for client use connect().
+
+Communication: Use send() to send data, recv() to receive data.
+
+Close Socket: Use close() when done.
