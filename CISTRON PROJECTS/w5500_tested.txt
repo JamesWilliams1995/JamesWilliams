@@ -1,0 +1,348 @@
+#include "main.h"
+#include <string.h>
+#include "W5500_com_reg.h"
+
+SPI_HandleTypeDef hspi1;
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_SPI1_Init(void);
+
+uint8_t rx_buf[512];
+
+ //common_inti
+    Network netinfo = {
+        .MC = {0x00, 0x08, 0xDC, 0x01, 0x02, 0x03},
+        .IP = {192, 168, 1, 101},
+        .sub_mask = {255, 255, 255, 0},
+        .gateWay = {192, 168, 1, 1}
+    };
+
+
+
+
+//socket init
+	DestinationIP Destinatin_info = {
+	.SC_PORT=5000,                                     //Socket n Source Port
+    .MC={0x00, 0x08, 0xDC, 0x01, 0x02, 0x03},          //Socket n Destination Hardware Address
+	.DES_IP={192, 168, 1, 102},                       //Socket n Destination IP Address
+	.DS_PORT=5000                                    // Socket n Destination Port
+	};
+
+
+
+
+/****************************************************end**********************/
+uint8_t mymsg[] = "HELLO CHEERA WELCOM";
+int Buf[10];
+int main(void) {
+
+	HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_SPI1_Init();
+
+    W5500_CS_HIGH(); // Set CS HIGH initially
+
+    uint8_t version = init_W5500(0x0039, (common_BSB<<3)|S_BSB_R);
+    if (version != 0x04) {
+        while (1); // SPI not working
+    }
+
+    W5500_SetNetworkInfo(&netinfo);
+	socket_reg_int(&Destinatin_info);
+	Connect_Listen(0);
+
+	//W5500_Senddata(mymsg);
+
+
+
+    while (1) {
+
+    	W5500_Recevdata(Buf);
+}
+}
+
+
+/***************************************************w5500***********************basic/
+
+
+/*
+ *
+ *  Title: W5500 module
+ *  Created on: 17 -09- 2025
+ *  Author: cheera
+ */
+
+#ifndef INC_W5500_COM_REG_H_
+#define INC_W5500_COM_REG_H_
+
+#include "stm32f4xx.h"
+#include"main.h"
+#include "stdbool.h"
+#include "stdint.h"
+
+#define W5500_CS_LOW()  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET)
+#define W5500_CS_HIGH()   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET)
+
+uint8_t W5500_ReadByte(uint16_t addr, uint8_t BSB);
+void W5500_WriteByte(uint16_t addr, uint8_t BSB, uint8_t data);
+
+extern SPI_HandleTypeDef hspi1;
+extern SPI_HandleTypeDef hspi1;
+
+#define common_BSB     0x00   // Common Register Block
+#define Socket0_BSB    0x01   // Socket 0 Register Block
+#define Socket0_Tx_BSB 0x02   // Socket 0 TX Buffer
+#define Socket0_Rx_BSB 0x03   // Socket 0 RX Buffer
+
+/*********************************SOCKET REGISTER ****************************/
+
+// MACRO for R/W bits
+#define S_BSB_W          0x04  // Write flag (bit2=1)
+#define S_BSB_R          0x00  // Read flag (bit2=0)
+
+// Socket modes
+#define Sn_MR_TCP        0x01  // TCP Mode
+#define Sn_MR_UDP        0x02  // UDP Mode
+#define S0_MR_MACRAW     0x03  // MACRAW Mode
+
+// Socket status values
+#define SOCK_INIT        0x13
+#define SOCK_ESTABLISHED 0x17
+#define SOCK_CLOSED      0x00
+#define SOCK_LISTEN      0x14
+#define SOCK_CLOSE_WAIT  0x1C
+
+/*********************************Sn_CR (Socket n Command Register)***********/
+#define OPEN             0x01
+#define LISTEN           0x02
+#define CONNECT          0x04
+#define DISCON           0x08
+#define CLOSE            0x10
+#define SEND             0x20
+#define SEND_KEEP        0x22
+#define RECV             0x40
+/************************end******************************************/
+
+/*****************************COMMON REGISTER****************************/
+typedef struct com_netconfig {
+	uint8_t MC[6];        // Source MAC
+	uint8_t IP[4];        // Source IP
+	uint8_t sub_mask[4];  // Subnet
+	uint8_t gateWay[4];   // Gateway
+} Network;
+
+typedef struct regconfig {
+	uint16_t SC_PORT;       // Source Port
+	uint8_t MC[6];          // Destination MAC
+	uint8_t DES_IP[4];      // Destination IP
+	uint16_t DS_PORT;       // Destination Port
+} DestinationIP;
+
+/****************************IC CONNECTION CHECK*****************************/
+uint8_t init_W5500(uint16_t addr, uint8_t BSB)  // spi check connection
+{
+	uint8_t tx[3], rx;
+
+	tx[0] = (addr >> 8) & 0xFF;
+	tx[1] = addr & 0xFF;
+	tx[2] = (BSB << 3) | S_BSB_R;   // ✅ FIX: always add Read flag
+
+	W5500_CS_LOW();
+	HAL_SPI_Transmit(&hspi1, tx, 3, 1000);
+	HAL_SPI_Receive(&hspi1, &rx, 1, 1000);
+	W5500_CS_HIGH();
+
+	return rx;
+}
+/****************************END*********************************************/
+
+/******************************comman_reg_int************************/
+void W5500_SetNetworkInfo(Network *net) {
+	// Gateway
+	W5500_WriteByte(0x0001, (common_BSB << 3) | S_BSB_W, net->gateWay[0]);
+	W5500_WriteByte(0x0002, (common_BSB << 3) | S_BSB_W, net->gateWay[1]);
+	W5500_WriteByte(0x0003, (common_BSB << 3) | S_BSB_W, net->gateWay[2]);
+	W5500_WriteByte(0x0004, (common_BSB << 3) | S_BSB_W, net->gateWay[3]);
+
+	// Subnet Mask
+	W5500_WriteByte(0x0005, (common_BSB << 3) | S_BSB_W, net->sub_mask[0]);
+	W5500_WriteByte(0x0006, (common_BSB << 3) | S_BSB_W, net->sub_mask[1]);
+	W5500_WriteByte(0x0007, (common_BSB << 3) | S_BSB_W, net->sub_mask[2]);
+	W5500_WriteByte(0x0008, (common_BSB << 3) | S_BSB_W, net->sub_mask[3]);
+
+	// MAC Address
+	W5500_WriteByte(0x0009, (common_BSB << 3) | S_BSB_W, net->MC[0]);
+	W5500_WriteByte(0x000A, (common_BSB << 3) | S_BSB_W, net->MC[1]);
+	W5500_WriteByte(0x000B, (common_BSB << 3) | S_BSB_W, net->MC[2]);
+	W5500_WriteByte(0x000C, (common_BSB << 3) | S_BSB_W, net->MC[3]);
+	W5500_WriteByte(0x000D, (common_BSB << 3) | S_BSB_W, net->MC[4]);
+	W5500_WriteByte(0x000E, (common_BSB << 3) | S_BSB_W, net->MC[5]);
+
+	// IP
+	W5500_WriteByte(0x000F, (common_BSB << 3) | S_BSB_W, net->IP[0]);
+	W5500_WriteByte(0x0010, (common_BSB << 3) | S_BSB_W, net->IP[1]);
+	W5500_WriteByte(0x0011, (common_BSB << 3) | S_BSB_W, net->IP[2]);
+	W5500_WriteByte(0x0012, (common_BSB << 3) | S_BSB_W, net->IP[3]);
+}
+
+/******************************socket_reg_int************************/
+void socket_reg_int(DestinationIP *D) {
+	// 1. Set TCP mode
+	W5500_WriteByte(0x0000, (Socket0_BSB << 3) | S_BSB_W, Sn_MR_TCP);
+
+	// 2. Source Port
+	W5500_WriteByte(0x0004, (Socket0_BSB << 3) | S_BSB_W,
+			(D->SC_PORT >> 8) & 0xFF);
+	W5500_WriteByte(0x0005, (Socket0_BSB << 3) | S_BSB_W, D->SC_PORT & 0xFF);
+
+//	// 3. Destination MAC
+//	W5500_WriteByte(0x0006, (Socket0_BSB<<3)|S_BSB_W, D->MC[0]);
+//	W5500_WriteByte(0x0007, (Socket0_BSB<<3)|S_BSB_W, D->MC[1]);
+//	W5500_WriteByte(0x0008, (Socket0_BSB<<3)|S_BSB_W, D->MC[2]);
+//	W5500_WriteByte(0x0009, (Socket0_BSB<<3)|S_BSB_W, D->MC[3]);
+//	W5500_WriteByte(0x000A, (Socket0_BSB<<3)|S_BSB_W, D->MC[4]);
+//	W5500_WriteByte(0x000B, (Socket0_BSB<<3)|S_BSB_W, D->MC[5]);
+
+	// 4. Destination IP
+	W5500_WriteByte(0x000C, (Socket0_BSB << 3) | S_BSB_W, D->DES_IP[0]);
+	W5500_WriteByte(0x000D, (Socket0_BSB << 3) | S_BSB_W, D->DES_IP[1]);
+	W5500_WriteByte(0x000E, (Socket0_BSB << 3) | S_BSB_W, D->DES_IP[2]);
+	W5500_WriteByte(0x000F, (Socket0_BSB << 3) | S_BSB_W, D->DES_IP[3]);
+
+	// 5. Destination Port
+	W5500_WriteByte(0x0010, (Socket0_BSB << 3) | S_BSB_W,
+			(D->DS_PORT >> 8) & 0xFF);
+	W5500_WriteByte(0x0011, (Socket0_BSB << 3) | S_BSB_W, D->DS_PORT & 0xFF);
+}
+
+/**********************open -> connect or listen based on argunemet ************************/
+
+uint8_t Connect_Listen(uint8_t x)  //1 connect 0 listen
+{
+
+	uint8_t status;
+
+	W5500_WriteByte(0x0001, (Socket0_BSB << 3) | S_BSB_W, OPEN);  //open command
+	do {
+		status = W5500_ReadByte(0x0003, (Socket0_BSB << 3) | S_BSB_R); //checking open  status
+	} while (status != SOCK_INIT);
+
+	switch (x) {
+	case 1:
+		W5500_WriteByte(0x0001, (Socket0_BSB << 3) | S_BSB_W, CONNECT); //connect command
+		do {
+			status = W5500_ReadByte(0x0003, (Socket0_BSB << 3) | S_BSB_R); //checking connect status
+		} while (status != SOCK_ESTABLISHED); // SOCK_SYNSENT
+		break;
+
+	case 0:
+		W5500_WriteByte(0x0001, (Socket0_BSB << 3) | S_BSB_W, LISTEN); //listen command
+		do {
+			status = W5500_ReadByte(0x0003, (Socket0_BSB << 3) | S_BSB_R); //checking listen status
+		} while (status != SOCK_LISTEN); // SOCK_SYNSENT
+		break;
+	}
+
+	return 1;
+
+}
+/***************************************END******************************/
+
+/**********************************READ AND WRITE FUNCTION*******************************/
+void W5500_WriteByte(uint16_t addr, uint8_t BSB, uint8_t data) {
+	uint8_t buf[4];
+	buf[0] = (addr >> 8) & 0xFF;
+	buf[1] = addr & 0xFF;
+	buf[2] = BSB;  // Write mode
+	buf[3] = data;
+
+	W5500_CS_LOW();
+	HAL_SPI_Transmit(&hspi1, buf, 4, HAL_MAX_DELAY); // Send header + data together
+	W5500_CS_HIGH();
+}
+
+uint8_t W5500_ReadByte(uint16_t addr, uint8_t BSB) // bsb mean control phase or Block Select Bits
+{
+	uint8_t tx[3], rx;
+
+	tx[0] = (addr >> 8) & 0xFF;
+	tx[1] = addr & 0xFF;
+	tx[2] = BSB;
+
+	W5500_CS_LOW();
+	HAL_SPI_Transmit(&hspi1, tx, 3, 1000);
+	HAL_SPI_Receive(&hspi1, &rx, 1, 1000);
+	W5500_CS_HIGH();
+
+	return rx;
+}
+
+/**************************************END***********************************************/
+
+/********************************TO SEND DATA THROUGH TX NEED SET SIZE AND BASELINE BEFORE SENDING PROSESS *******************************/
+void W5500_Senddata(uint8_t *msg) {
+	uint16_t ptr;
+	uint16_t offset;
+	uint16_t len = strlen((char*) msg);
+
+//	// 1. Read Sn_TX_WR pointer (2 bytes) from Socket 0 Register Block
+	ptr = W5500_ReadByte(0x0024, (Socket0_BSB << 3) | S_BSB_R) << 8;
+	ptr |= W5500_ReadByte(0x0025, (Socket0_BSB << 3) | S_BSB_R);
+
+	// 2. Calculate offset into TX buffer (2 KB = 0x07FF mask)
+	offset = ptr & 0x07FF;
+
+	// 3. Write data into TX buffer (with wrap-around)
+	for (uint16_t i = 0; i < len; i++) {
+		W5500_WriteByte((offset + i) & 0x07FF, (Socket0_Tx_BSB << 3) | S_BSB_W,
+				msg[i]);
+	}
+
+	// 4. Update Sn_TX_WR with new pointer (socket register block)
+	ptr += len;
+	W5500_WriteByte(0x0024, (Socket0_BSB << 3) | S_BSB_W, (ptr >> 8) & 0xFF);
+	W5500_WriteByte(0x0025, (Socket0_BSB << 3) | S_BSB_W, ptr & 0xFF);
+
+	// 5. Issue SEND command
+	W5500_WriteByte(0x0001, (Socket0_BSB << 3) | S_BSB_W, SEND);
+
+	// 6. Wait until command clears
+	while (W5500_ReadByte(0x0001, (Socket0_BSB << 3) | S_BSB_R) != 0x00)
+		;
+
+	// 7. (Optional) Check SEND_OK interrupt flag in Sn_IR
+}
+
+/********************************end******************/
+
+uint16_t W5500_Recevdata(int *Buf) {
+	uint16_t rev_size, offset, ptr;
+
+	rev_size = W5500_ReadByte(0x0026, (Socket0_BSB << 3) | S_BSB_R) << 8;
+	rev_size |= W5500_ReadByte(0x0027, (Socket0_BSB << 3) | S_BSB_R);
+
+	// 2. Read Sn_RX_RD pointer (2 bytes)
+	ptr = W5500_ReadByte(0x0028, (Socket0_BSB << 3) | S_BSB_R) << 8;
+	ptr |= W5500_ReadByte(0x0029, (Socket0_BSB << 3) | S_BSB_R);
+
+	// 3. Calculate offset into RX buffer
+	offset = ptr & 0x07FF;
+
+	for (uint16_t i = 0; i < rev_size; i++) {
+		Buf[i] = W5500_ReadByte((offset + i) & 0x07FF,
+				(Socket0_BSB << 3) | S_BSB_R);
+	}
+	// 4. Update Sn_RX_RD pointer
+	ptr += rev_size;
+	W5500_WriteByte(0x0028, (Socket0_BSB << 3) | S_BSB_W, (ptr >> 8) & 0xFF);
+	W5500_WriteByte(0x0029, (Socket0_BSB << 3) | S_BSB_W, ptr & 0xFF);
+
+	W5500_WriteByte(0x0001, (Socket0_BSB << 3) | S_BSB_W, RECV);
+
+	return rev_size;
+
+}
+
+#endif /* INC_W5500_COM_REG_H_ */
